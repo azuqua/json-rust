@@ -30,6 +30,7 @@ const MAX_PRECISION: u64 = 576460752303423500;
 // How many nested Objects/Arrays are allowed to be parsed
 const DEPTH_LIMIT: usize = 512;
 
+use std::collections::VecDeque;
 
 // The `Parser` struct keeps track of indexing over our buffer. All niceness
 // has been abandoned in favor of raw pointer magic. Does that make you feel
@@ -636,7 +637,7 @@ impl<'a> Parser<'a> {
 
     // Parse away!
     fn parse(&mut self) -> Result<JsonValue> {
-        let mut stack = Vec::with_capacity(3);
+        let mut stack = VecDeque::new();
         let mut ch = expect_byte_ignore_whitespace!(self);
 
         'parsing: loop {
@@ -649,7 +650,7 @@ impl<'a> Parser<'a> {
                             return Err(Error::ExceededDepthLimit);
                         }
 
-                        stack.push(StackBlock(JsonValue::Array(Vec::with_capacity(2)), 0));
+                        stack.push_back(StackBlock(JsonValue::Array(Vec::with_capacity(2)), ""));
                         continue 'parsing;
                     }
 
@@ -668,11 +669,13 @@ impl<'a> Parser<'a> {
                         if ch != b'"' {
                             return self.unexpected_character()
                         }
+                        let key = expect_string!(self);
+                        object.insert(key, JsonValue::Null);
 
-                        let index = object.insert_index(expect_string!(self), JsonValue::Null);
+                        //let index = object.insert_index(expect_string!(self), JsonValue::Null);
                         expect!(self, b':');
 
-                        stack.push(StackBlock(JsonValue::Object(object), index));
+                        stack.push_back(StackBlock(JsonValue::Object(object), key));
 
                         ch = expect_byte_ignore_whitespace!(self);
 
@@ -710,7 +713,7 @@ impl<'a> Parser<'a> {
             };
 
             'popping: loop {
-                match stack.last_mut() {
+                match stack.back_mut() {
                     None => {
                         expect_eof!(self);
 
@@ -733,15 +736,19 @@ impl<'a> Parser<'a> {
                         }
                     },
 
-                    Some(&mut StackBlock(JsonValue::Object(ref mut object), ref mut index )) => {
-                        object.override_at(*index, value);
+                    Some(&mut StackBlock(JsonValue::Object(ref mut object), ref mut key )) => {
+                        object.insert(key, value);
 
                         ch = expect_byte_ignore_whitespace!(self);
 
                         match ch {
                             b',' => {
                                 expect!(self, b'"');
-                                *index = object.insert_index(expect_string!(self), JsonValue::Null);
+                                let _key = expect_string!(self);
+                                object.insert(_key, JsonValue::Null);
+                                *key = _key;
+
+                                //*index = object.insert_index(expect_string!(self), JsonValue::Null);
                                 expect!(self, b':');
 
                                 ch = expect_byte_ignore_whitespace!(self);
@@ -756,7 +763,7 @@ impl<'a> Parser<'a> {
                     _ => unreachable!(),
                 }
 
-                value = match stack.pop() {
+                value = match stack.pop_back() {
                     Some(StackBlock(value, _)) => value,
                     None                       => break 'popping
                 }
@@ -765,10 +772,118 @@ impl<'a> Parser<'a> {
     }
 }
 
-struct StackBlock(JsonValue, usize);
+struct StackBlock<'a>(JsonValue, &'a str);
 
 // All that hard work, and in the end it's just a single function in the API.
 #[inline]
 pub fn parse(source: &str) -> Result<JsonValue> {
     Parser::new(source).parse()
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::value::JsonValue;
+
+    #[macro_use]
+    use crate::object;
+    use crate::array;
+
+    #[test]
+    fn it_should_parse_basic_json_values() {
+        let s = "{\"a\":1,\"b\":true,\"c\":false,\"d\":null,\"e\":2}";
+        let actual = parse(s).unwrap();
+        let mut expected = object! {
+            "a" => 1,
+            "b" => true,
+            "c" => false,
+            "e" => 2
+        };
+        expected["d"] = JsonValue::Null;
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn it_should_parse_json_arrays() {
+        let s = "{\"a\":1,\"b\":true,\"c\":false,\"d\":null,\"e\":2,\"f\":[1,2,3,false,true,[],{}]}";
+        let actual = parse(s).unwrap();
+        let mut expected = object! {
+            "a" => 1,
+            "b" => true,
+            "c" => false,
+            "e" => 2
+        };
+        expected["d"] = JsonValue::Null;
+        expected["f"] = array![
+            1,2,3,
+            false,
+            true,
+            array![],
+            object!{}
+        ];
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn it_should_parse_json_nested_object() {
+        let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
+        let actual = parse(s).unwrap();
+        let mut expected = object! {
+            "a" => 1,
+            "b" => object!{
+                "c" => 2,
+                "d" => object!{
+                    "e" => object! {
+                        "f" => object!{
+                            "g" => 3,
+                            "h" => array![]
+                        }
+                    }
+                },
+                "i" => 4,
+                "j" => array![],
+                "k" => object!{
+                    "l" => 5,
+                    "m" => object!{}
+                }
+            }
+        };
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn it_should_parse_json_complex_object() {
+        let s = "{\"a\":1,\"b\":{\"c\":2,\"d\":{\"e\":{\"f\":{\"g\":3,\"h\":[{\"z\":1},{\"y\":2,\"x\":[{},{}]}]}}},\"i\":4,\"j\":[],\"k\":{\"l\":5,\"m\":{}}}}";
+        let actual = parse(s).unwrap();
+        let mut expected = object! {
+            "a" => 1,
+            "b" => object!{
+                "c" => 2,
+                "d" => object!{
+                    "e" => object! {
+                        "f" => object!{
+                            "g" => 3,
+                            "h" => array![
+                                object!{"z" => 1},
+                                object!{"y" => 2, "x" => array![object!{}, object!{}]}
+                            ]
+                        }
+                    }
+                },
+                "i" => 4,
+                "j" => array![],
+                "k" => object!{
+                    "l" => 5,
+                    "m" => object!{}
+                }
+            }
+        };
+
+        assert_eq!(actual, expected);
+    }
+
 }

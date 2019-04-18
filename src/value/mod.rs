@@ -7,10 +7,68 @@ use std::io::{ self, Write };
 use short::Short;
 use number::Number;
 use object::Object;
-use iterators::{ Members, MembersMut, Entries, EntriesMut };
+use iterators::{ Members, MembersMut, Entries };
 use codegen::{ Generator, PrettyGenerator, DumpGenerator, WriterGenerator, PrettyWriterGenerator };
 
 mod implements;
+
+lazy_static! {
+
+    static ref JSON_OBJECT: Object = Object::new();
+
+}
+
+use indexmap::map::IterMut;
+
+/// Mutable iterator over key value pairs of `JsonValue::Object`.
+pub enum EntriesMut<'a> {
+    Object(IterMut<'a, String, JsonValue>),
+    Empty
+}
+
+impl<'a> EntriesMut<'a> {
+
+    pub fn empty() -> Self {
+        EntriesMut::Empty
+    }
+
+}
+
+impl<'a> Iterator for EntriesMut<'a> {
+    type Item = (&'a str, &'a mut JsonValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match *self {
+            EntriesMut::Object(ref mut iter) => iter.next()
+              .map(|(k, v)| (k.as_str(), v)),
+            EntriesMut::Empty => None
+        }
+    }
+
+}
+
+impl<'a> DoubleEndedIterator for EntriesMut<'a> {
+
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match *self {
+            EntriesMut::Object(ref mut iter) => iter.next_back()
+              .map(|(k, v)| (k.as_str(), v)),
+            EntriesMut::Empty => None
+        }
+    }
+
+}
+
+impl<'a> ExactSizeIterator for EntriesMut<'a> {
+
+    fn len(&self) -> usize {
+        match *self {
+            EntriesMut::Object(ref iter) => iter.len(),
+            EntriesMut::Empty => 0
+        }
+    }
+
+}
 
 // These are convenience macros for converting `f64` to the `$unsigned` type.
 // The macros check that the numbers are representable the target type.
@@ -466,7 +524,7 @@ impl JsonValue {
             JsonValue::Object(ref object) => {
                 object.iter()
             },
-            _ => Entries::empty()
+            _ => JSON_OBJECT.iter()
         }
     }
 
@@ -476,7 +534,7 @@ impl JsonValue {
     pub fn entries_mut(&mut self) -> EntriesMut {
         match *self {
             JsonValue::Object(ref mut object) => {
-                object.iter_mut()
+                EntriesMut::Object(object.iter_mut())
             },
             _ => EntriesMut::empty()
         }

@@ -196,6 +196,10 @@
 //! # }
 //! ```
 
+extern crate indexmap;
+#[macro_use]
+extern crate lazy_static;
+
 use std::result;
 
 mod codegen;
@@ -205,7 +209,11 @@ mod error;
 mod util;
 
 pub mod short;
+
+#[macro_use]
+#[macro_export]
 pub mod object;
+
 pub mod number;
 
 pub use error::Error;
@@ -220,6 +228,11 @@ pub use value::JsonValue::Null;
 pub type Result<T> = result::Result<T, Error>;
 
 pub mod iterators {
+    use indexmap::map::{
+        IterMut as ObjectIterMut,
+        Iter as ObjectIter
+    };
+
     /// Iterator over members of `JsonValue::Array`.
     pub type Members<'a> = ::std::slice::Iter<'a, super::JsonValue>;
 
@@ -227,10 +240,9 @@ pub mod iterators {
     pub type MembersMut<'a> = ::std::slice::IterMut<'a, super::JsonValue>;
 
     /// Iterator over key value pairs of `JsonValue::Object`.
-    pub type Entries<'a> = super::object::Iter<'a>;
+    pub type Entries<'a> = ObjectIter<'a, String, super::JsonValue>;
 
-    /// Mutable iterator over key value pairs of `JsonValue::Object`.
-    pub type EntriesMut<'a> = super::object::IterMut<'a>;
+    pub use value::EntriesMut;
 }
 
 #[deprecated(since="0.9.0", note="use `json::Error` instead")]
@@ -260,79 +272,3 @@ pub fn stringify_pretty<T>(root: T, spaces: u16) -> String where T: Into<JsonVal
     let root: JsonValue = root.into();
     root.pretty(spaces)
 }
-
-/// Helper macro for creating instances of `JsonValue::Array`.
-///
-/// ```
-/// # #[macro_use] extern crate json;
-/// # fn main() {
-/// let data = array!["foo", 42, false];
-///
-/// assert_eq!(data[0], "foo");
-/// assert_eq!(data[1], 42);
-/// assert_eq!(data[2], false);
-///
-/// assert_eq!(data.dump(), r#"["foo",42,false]"#);
-/// # }
-/// ```
-#[macro_export]
-macro_rules! array {
-    [] => ($crate::JsonValue::new_array());
-
-    [ $( $item:expr ),* ] => ({
-        let mut array = Vec::new();
-
-        $(
-            array.push($item.into());
-        )*
-
-        $crate::JsonValue::Array(array)
-    })
-}
-
-/// Helper macro for creating instances of `JsonValue::Object`.
-///
-/// ```
-/// # #[macro_use] extern crate json;
-/// # fn main() {
-/// let data = object!{
-///     "foo" => 42,
-///     "bar" => false
-/// };
-///
-/// assert_eq!(data["foo"], 42);
-/// assert_eq!(data["bar"], false);
-///
-/// assert_eq!(data.dump(), r#"{"foo":42,"bar":false}"#);
-/// # }
-/// ```
-#[macro_export]
-macro_rules! object {
-    // Empty object.
-    {} => ($crate::JsonValue::new_object());
-
-    // Non-empty object, no trailing comma.
-    //
-    // In this implementation, key/value pairs separated by commas.
-    { $( $key:expr => $value:expr ),* } => {
-        object!( $(
-            $key => $value,
-        )* )
-    };
-
-    // Non-empty object, trailing comma.
-    //
-    // In this implementation, the comma is part of the value.
-    { $( $key:expr => $value:expr, )* } => ({
-        use $crate::object::Object;
-
-        let mut object = Object::new();
-
-        $(
-            object.insert($key, $value.into());
-        )*
-
-        $crate::JsonValue::Object(object)
-    })
-}
-

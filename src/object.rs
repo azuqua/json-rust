@@ -99,6 +99,12 @@ pub struct Object {
     inner: IndexMap<String, JsonValue>
 }
 
+impl From<IndexMap<String, JsonValue>> for Object {
+    fn from(val: IndexMap<String, JsonValue>) -> Self {
+        Object { inner: val }
+    }
+}
+
 impl Object {
     /// Create a new, empty instance of `Object`. Empty `Object` performs no
     /// allocation until a value is inserted into it.

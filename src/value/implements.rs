@@ -8,6 +8,8 @@ use short::{ self, Short };
 use number::Number;
 use object::Object;
 
+use indexmap::IndexMap;
+
 use { JsonValue, Null };
 
 macro_rules! implement_eq {
@@ -72,6 +74,12 @@ impl<'a> From<&'a str> for JsonValue {
     }
 }
 
+impl<'a> From<&'a String> for JsonValue {
+    fn from(val: &'a String) -> JsonValue {
+        JsonValue::String(val.to_owned())
+    }
+}
+
 impl<T: Into<JsonValue>> From<Option<T>> for JsonValue {
     fn from(val: Option<T>) -> JsonValue {
         match val {
@@ -120,6 +128,13 @@ impl From<BTreeMap<String, JsonValue>> for JsonValue {
         JsonValue::Object(object)
     }
 }
+
+impl From<IndexMap<String, JsonValue>> for JsonValue {
+    fn from(mut val: IndexMap<String, JsonValue>) -> JsonValue {
+        JsonValue::Object(val.into())
+    }
+}
+
 
 impl<'a> PartialEq<&'a str> for JsonValue {
     fn eq(&self, other: &&str) -> bool {

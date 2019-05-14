@@ -202,7 +202,7 @@ extern crate lazy_static;
 
 use std::result;
 
-mod codegen;
+pub mod codegen;
 mod parser;
 mod value;
 mod error;

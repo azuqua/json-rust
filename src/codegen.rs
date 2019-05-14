@@ -38,8 +38,76 @@ static ESCAPED: [u8; 256] = [
   __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, __, // F
 ];
 
+#[cfg(test)]
+mod gen_test {
+    use codegen::DumpGenerator;
+    use codegen::Generator;
+    use std::borrow::Borrow;
+
+    // can't do an equality check on the output bytes here since quotes and escape characters are added
+
+    #[test]
+    fn should_not_panic_on_bad_bytes() {
+        // found from fuzzing the json stringify function
+        let mut all = [255,255,255,255,255,255,255,255,255,0,217,216,255,255,255,255,255,255,255,255,249,217,255,255,144,255,255,1,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,0,255,0,217,23,23,23,23,23,23,23,23,23,23,23,0,0,22,0,22,0,1,0,0,0,0,0,0,21,27,22,0,1,0,0,0,0,0,0,22,14,0,210,38,221,0,0,0,0,14,0,16,0,4,16,29,29,29,29,29,29,29,29,29,29,0,0,0,5,14,0,0,0,29,29,29,29,29,29,29,29,29,29,29,29,29,0,0,29,29,29,29,144,0,0,8,0,0,0,0,250,190,255,0,0,0,0,0,0,0,0,22,0,1,0,0,0,0,14,0,0,0,0,14,22,14,0,14,0,14,14,14,0,0,0,27,27,27,27,27,22,0,14,0,0,0,0,0,0,0,14,0,0,0,5,14,0,0,0,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,12,0,22,14,14,14,14,0,0,0,0,0,0,14,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,14,14,0,0,0,0,88,88,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,14,0,0,0,0,0,14,0,0,0,0,0,0,0,14,0,0,14,14,0,0,0,0,0,0,0,0,0,0,0,21,27,0,14,0,21,27,22,25,1,0,0,0,0,0,0,0,0,0,0,22,0,0,0,0,0,0,0,0,5,14,0,0,0,0,0,0,5,14,0,0,0,0,14,14,255,14,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,253,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,42,255,255,255,255,255,255,255,255,255,255,255,8,145];
+        let input = String::from_utf8_lossy(&all);
+
+        let mut generator = DumpGenerator::new();
+        generator.write_string(&input);
+
+        println!("output string: {}", String::from_utf8_lossy(&generator.code));
+    }
+
+    #[test]
+    fn should_panic_on_bad_bytes() {
+        let mut all = "`�^S^R�^]^?^@^@E BOONE TRL ";
+        let mut generator = DumpGenerator::new();
+        generator.write_string_complex(all, 3);
+
+        println!("output string: {}", String::from_utf8_lossy(&generator.code));
+    }
+
+    #[test]
+    fn should_not_panic_on_bad_bytes_2() {
+        let mut all = [0, 12, 128, 88, 64, 99].to_vec();
+        let input = String::from_utf8_lossy(&all);
+
+        let mut generator = DumpGenerator::new();
+        generator.write_string(&input);
+
+        println!("output string: {}", String::from_utf8_lossy(&generator.code));
+    }
+
+}
+
 pub trait Generator {
     type T: Write;
+
+    #[inline(never)]
+    fn write_string_complex(&mut self, string: &str, mut start: usize) -> io::Result<()> {
+        // backtrack until a valid character boundary is found or the start of the string is reached
+        // this works b/c this fn is only called by write_string(), which doesn't write anything before calling this
+        while !string.is_char_boundary(start) && start > 0 {
+            start -= 1;
+        }
+
+        try!(self.write(string[ .. start].as_bytes()));
+
+        for (index, ch) in string.bytes().enumerate().skip(start) {
+            let escape = ESCAPED[ch as usize];
+            if escape > 0 {
+                try!(self.write(string[start .. index].as_bytes()));
+                try!(self.write(&[b'\\', escape]));
+                start = index + 1;
+            }
+            if escape == b'u' {
+                try!(write!(self.get_writer(), "{:04x}", ch));
+            }
+        }
+        try!(self.write(string[start ..].as_bytes()));
+
+        self.write_char(b'"')
+    }
 
     fn get_writer(&mut self) -> &mut Self::T;
 
@@ -63,26 +131,6 @@ pub trait Generator {
 
     #[inline(always)]
     fn dedent(&mut self) {}
-
-    #[inline(never)]
-    fn write_string_complex(&mut self, string: &str, mut start: usize) -> io::Result<()> {
-        try!(self.write(string[ .. start].as_bytes()));
-
-        for (index, ch) in string.bytes().enumerate().skip(start) {
-            let escape = ESCAPED[ch as usize];
-            if escape > 0 {
-                try!(self.write(string[start .. index].as_bytes()));
-                try!(self.write(&[b'\\', escape]));
-                start = index + 1;
-            }
-            if escape == b'u' {
-                try!(write!(self.get_writer(), "{:04x}", ch));
-            }
-        }
-        try!(self.write(string[start ..].as_bytes()));
-
-        self.write_char(b'"')
-    }
 
     #[inline(always)]
     fn write_string(&mut self, string: &str) -> io::Result<()> {

@@ -77,6 +77,17 @@ mod gen_test {
 
         println!("output string: {}", String::from_utf8_lossy(&generator.code));
     }
+    
+    #[test]
+    fn should_not_panic_on_bad_bytes_3() {
+        let data = b"\x48\x48\x48\x57\x03\xE8\x48\x48\xE8\x03\x8F\x48\x29\x48\x48";
+        let s = unsafe {
+            String::from_utf8_unchecked(data.to_vec())
+        };
+        let mut generator = DumpGenerator::new();
+        generator.write_string(&s);
+    }
+
 
 }
 

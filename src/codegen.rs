@@ -54,8 +54,6 @@ mod gen_test {
 
         let mut generator = DumpGenerator::new();
         generator.write_string(&input);
-
-        println!("output string: {}", String::from_utf8_lossy(&generator.code));
     }
 
     #[test]
@@ -63,8 +61,6 @@ mod gen_test {
         let mut all = "`�^S^R�^]^?^@^@E BOONE TRL ";
         let mut generator = DumpGenerator::new();
         generator.write_string_complex(all, 3);
-
-        println!("output string: {}", String::from_utf8_lossy(&generator.code));
     }
 
     #[test]
@@ -74,8 +70,16 @@ mod gen_test {
 
         let mut generator = DumpGenerator::new();
         generator.write_string(&input);
+    }
 
-        println!("output string: {}", String::from_utf8_lossy(&generator.code));
+    #[test]
+    fn should_not_panic_on_bad_bytes_3() {
+        let data = b"\x48\x48\x48\x57\x03\xE8\x48\x48\xE8\x03\x8F\x48\x29\x48\x48";
+        let s = unsafe {
+            String::from_utf8_unchecked(data.to_vec())
+        };
+        let mut generator = DumpGenerator::new();
+        generator.write_string(&s);
     }
     
     #[test]
@@ -114,6 +118,10 @@ pub trait Generator {
             if escape == b'u' {
                 try!(write!(self.get_writer(), "{:04x}", ch));
             }
+        }
+
+        while !string.is_char_boundary(start) && start > 0 {
+            start -= 1;
         }
         try!(self.write(string[start ..].as_bytes()));
 

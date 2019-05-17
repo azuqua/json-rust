@@ -100,18 +100,13 @@ pub trait Generator {
 
     #[inline(never)]
     fn write_string_complex(&mut self, string: &str, mut start: usize) -> io::Result<()> {
-        // backtrack until a valid character boundary is found or the start of the string is reached
-        // this works b/c this fn is only called by write_string(), which doesn't write anything before calling this
-        while !string.is_char_boundary(start) && start > 0 {
-            start -= 1;
-        }
-
-        try!(self.write(string[ .. start].as_bytes()));
+        let bytes = string.as_bytes();
+        try!(self.write(&bytes[ .. start]));
 
         for (index, ch) in string.bytes().enumerate().skip(start) {
             let escape = ESCAPED[ch as usize];
             if escape > 0 {
-                try!(self.write(string[start .. index].as_bytes()));
+                try!(self.write(&bytes[start .. index]));
                 try!(self.write(&[b'\\', escape]));
                 start = index + 1;
             }
@@ -119,12 +114,7 @@ pub trait Generator {
                 try!(write!(self.get_writer(), "{:04x}", ch));
             }
         }
-
-        while !string.is_char_boundary(start) && start > 0 {
-            start -= 1;
-        }
-        try!(self.write(string[start ..].as_bytes()));
-
+        try!(self.write(&bytes[start ..]));
         self.write_char(b'"')
     }
 

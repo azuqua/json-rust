@@ -43,6 +43,8 @@ mod gen_test {
     use codegen::DumpGenerator;
     use codegen::Generator;
     use std::borrow::Borrow;
+    use JsonValue;
+    use ::parse;
 
     // can't do an equality check on the output bytes here since quotes and escape characters are added
 
@@ -81,15 +83,28 @@ mod gen_test {
         let mut generator = DumpGenerator::new();
         generator.write_string(&s);
     }
-    
+
     #[test]
-    fn should_not_panic_on_bad_bytes_3() {
-        let data = b"\x48\x48\x48\x57\x03\xE8\x48\x48\xE8\x03\x8F\x48\x29\x48\x48";
-        let s = unsafe {
-            String::from_utf8_unchecked(data.to_vec())
-        };
-        let mut generator = DumpGenerator::new();
-        generator.write_string(&s);
+    fn should_encode_special_characters() {
+        let val = "🤓🥳,🤗,😧,😧";
+        let mut data = JsonValue::new_object();
+        data["foo"] = val.into();
+
+        let encoded = data.dump();
+        assert_eq!(encoded, "{\"foo\":\"🤓🥳,🤗,😧,😧\"}");
+    }
+
+    #[test]
+    fn should_encode_special_characters_newline() {
+        let val = "🤓🥳,🤗,😧,😧 \n foo 🤓🥳,🤗,😧,😧";
+        let mut data = JsonValue::new_object();
+        data["foo"] = val.into();
+
+        let encoded = data.dump();
+        let decoded = parse(&encoded).unwrap();
+
+        assert_eq!(decoded, data, "json values eq");
+        assert_eq!(encoded, "{\"foo\":\"🤓🥳,🤗,😧,😧 \\n foo 🤓🥳,🤗,😧,😧\"}", "json strings eq");
     }
 
 

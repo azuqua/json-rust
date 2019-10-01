@@ -418,7 +418,6 @@ impl<'a> Parser<'a> {
 
         let colno = col.chars().count();
 
-        println!("buffer {:?}", self.buffer.iter().map(|c| *c as char).collect::<Vec<char>>());
         Err(Error::UnexpectedCharacter {
             ch: ch,
             line: lineno + 1,

@@ -504,11 +504,12 @@ impl<'a> Parser<'a> {
     // having to be read from source to a buffer and then from a buffer to
     // our target string. Nothing to be done about this, really.
     fn read_complex_string<'b>(&mut self, start: usize) -> Result<&'b str> {
-        self.buffer.clear();
+        let len = self.buffer.len();
+        //self.buffer.clear();
         let mut ch = b'\\';
 
         // TODO: Use fastwrite here as well
-        self.buffer.extend_from_slice(self.source[start .. self.index - 1].as_bytes());
+        self.buffer.extend_from_slice(&self.source.as_bytes()[start .. self.index - 1]);
 
         loop {
             if ALLOWED[ch as usize] {
@@ -516,6 +517,7 @@ impl<'a> Parser<'a> {
                 ch = expect_byte!(self);
                 continue;
             }
+
             match ch {
                 b'"'  => break,
                 b'\\' => {
@@ -528,7 +530,7 @@ impl<'a> Parser<'a> {
                         },
                         b'"'  |
                         b'\\' |
-                        b'/'  => escaped,
+                        b'/' => escaped,
                         b'b'  => 0x8,
                         b'f'  => 0xC,
                         b't'  => b'\t',
@@ -554,7 +556,7 @@ impl<'a> Parser<'a> {
                 // issues here, we construct a new slice from raw parts, which
                 // then has lifetime bound to the outer function scope instead
                 // of the parser itself.
-                slice::from_raw_parts(self.buffer.as_ptr(), self.buffer.len())
+                slice::from_raw_parts(self.buffer[len..].as_ptr(), self.buffer.len() - len)
             )
         })
     }
@@ -772,6 +774,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[derive(Debug)]
 struct StackBlock<'a>(JsonValue, &'a str);
 
 // All that hard work, and in the end it's just a single function in the API.
@@ -784,11 +787,44 @@ pub fn parse(source: &str) -> Result<JsonValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::stringify;
+    use ::stringify_pretty;
     use ::value::JsonValue;
 
     #[macro_use]
     use crate::object;
     use crate::array;
+
+    use std::fs::File;
+    use std::io::prelude::*;
+
+    #[test]
+    fn it_should_parse_escaped_forward_slashes() {
+        let mut file = File::open("tests/test_json").unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        let actual = parse(&contents).unwrap();
+        let serialized = stringify(actual.clone());
+
+        let serialized_pretty = stringify_pretty(actual.clone(), 2);
+        println!("serialized: {}", serialized_pretty);
+
+        assert_eq!(serialized, contents);
+    }
+
+    #[test]
+    fn it_should_parse_escaped_forward_slashes_2() {
+        let contents = String::from("{\"ab\":\"c\\\"d\\\"e\",\"f\":1}");
+
+        let actual = parse(&contents).unwrap();
+        let serialized = stringify(actual.clone());
+
+        let serialized_pretty = stringify_pretty(actual.clone(), 2);
+        println!("serialized: {}", serialized_pretty);
+
+        assert_eq!(serialized, contents);
+    }
 
     #[test]
     fn it_should_parse_basic_json_values() {

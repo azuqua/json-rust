@@ -148,6 +148,15 @@ impl Object {
         self.inner.remove(key)
     }
 
+    /// Attempts to remove the value behind `key` while preserving order, if successful
+    /// will return the `JsonValue` stored behind the `key`.
+    /// Computes in O(n) time (average).
+    pub fn shift_remove(&mut self, key: &str) -> Option<JsonValue> {
+        println!("inner shift remove called");
+        dbg!();
+        self.inner.shift_remove(key)
+    }
+
     #[inline(always)]
     pub fn len(&self) -> usize {
         self.inner.len()

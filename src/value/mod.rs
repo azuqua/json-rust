@@ -552,6 +552,18 @@ impl JsonValue {
         }
     }
 
+    /// Works on `JsonValue::Object` - remove a key and return the value it held while preserving
+    /// underlying key-value iteration order.  If the key was not present, the method is called on 
+    /// anything but an object, it will return a null.
+    pub fn shift_remove(&mut self, key: &str) -> JsonValue {
+        match *self {
+            JsonValue::Object(ref mut object) => {
+                object.shift_remove(key).unwrap_or(JsonValue::Null)
+            },
+            _ => JsonValue::Null
+        }
+    }
+
     /// Works on `JsonValue::Array` - remove an entry and return the value it held.
     /// If the method is called on anything but an object or if the index is out of bounds, it
     /// will return `JsonValue::Null`.
